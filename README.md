@@ -10,7 +10,7 @@ Ein eigenständiger Web-Reader für öffentlich abrufbare Manhwa auf https://oly
 - Kapitel beim Scrollen automatisch nachladen.
 - Kapitel, Bild und relative Bildposition dauerhaft pro Browser speichern (Cloudflare D1 und eine zufällige Browserkennung).
 - Zuletzt gelesene Serien mit dem gespeicherten Lesepunkt fortsetzen.
-- Mobilansicht, einstellbare Lesebreite, klare Fehlerzustände und Links zum Original.
+- Mobilansicht, volle Bildschirmbreite, vorübergehendes Zoomen mit zwei Fingern, klare Fehlerzustände und Links zum Original.
 
 ## Nutzung
 
@@ -30,7 +30,7 @@ Lokale D1-Migration nach dem ersten Build:
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_tranquil_kinsey_walden.sql
 ```
 
-Die Leseansicht nutzt standardmäßig die gesamte Bildschirmbreite. Kopf und Titel verschwinden beim Lesen nach unten und erscheinen beim Scrollen nach oben. Die Werkzeugleisten liegen über dem Bild und erzeugen keinen freien Rand. Escape blendet sie ebenfalls ein.
+Die Leseansicht nutzt immer die gesamte verfügbare Bildschirmbreite, unabhängig von der Schriftgröße. Mit zwei Fingern lässt sich eine Bildstelle bis zu vierfach vergrößern; sobald ein Finger losgelassen wird, kehrt das Bild zur Bildschirmbreite zurück. Während dieser Geste wird die gespeicherte Bildposition nicht verändert. Ein Finger scrollt weiterhin normal. Kopf und Titel verschwinden beim Lesen nach unten und erscheinen beim Scrollen nach oben. Die Werkzeugleisten liegen über dem Bild und erzeugen keinen freien Rand. Escape blendet sie ebenfalls ein.
 
 ## Verifikation und Grenzen
 

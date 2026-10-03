@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { BookOpen, Search, Bookmark, Layers, Loader2, X, ExternalLink, RotateCcw, Check, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { bindTemporaryPinch } from '@/lib/temporary-pinch';
 import type { Series, Chapter } from '@/lib/olympus';
 type Progress={slug:string;title:string;chapter:string;image:number;offset:number;start:number;end:number;updated:number};
 type Book=Series & {chapters:Chapter[]};
@@ -15,7 +15,9 @@ const sourceLink=(slug:string)=>`https://olympustaff.com/series/${slug}`;
 
 function PageImage({src,index,chapter,onLoad,eager}:{src:string;index:number;chapter:string;onLoad:()=>void;eager:boolean}){
  const [failed,setFailed]=useState(false),[attempt,setAttempt]=useState(0);
- return failed?<div className="image-error"><AlertCircle size={24}/><p>Bild {index+1} konnte nicht geladen werden.</p><Button variant="outline" onClick={()=>{setFailed(false);setAttempt(a=>a+1);}}>Erneut laden</Button><a href={src} target="_blank" rel="noreferrer">Originalbild öffnen</a></div>:<img key={attempt} className="page-image" data-chapter={chapter} data-image={index} src={src} alt={`Kapitel ${chapter}, Bild ${index+1}`} loading={eager?'eager':'lazy'} decoding="async" referrerPolicy="no-referrer" onError={()=>setFailed(true)} onLoad={onLoad}/>;
+ const frame=useRef<HTMLDivElement|null>(null);
+ useEffect(()=>frame.current?bindTemporaryPinch(frame.current):undefined,[]);
+ return <div className="page-frame" ref={frame}>{failed?<div className="image-error"><AlertCircle size={24}/><p>Bild {index+1} konnte nicht geladen werden.</p><Button variant="outline" onClick={()=>{setFailed(false);setAttempt(a=>a+1);}}>Erneut laden</Button><a href={src} target="_blank" rel="noreferrer">Originalbild öffnen</a></div>:<img key={attempt} className="page-image" data-chapter={chapter} data-image={index} src={src} alt={`Kapitel ${chapter}, Bild ${index+1}`} loading={eager?'eager':'lazy'} decoding="async" referrerPolicy="no-referrer" draggable={false} onError={()=>setFailed(true)} onLoad={onLoad}/>}</div>;
 }
 
 export default function Reader(){
@@ -24,7 +26,7 @@ export default function Reader(){
  const [library,setLibrary]=useState<Progress[]>([]),[libraryError,setLibraryError]=useState('');
  const [book,setBook]=useState<Book|null>(null),[busy,setBusy]=useState(''),[error,setError]=useState(''),[from,setFrom]=useState(''),[to,setTo]=useState('');
  const [session,setSession]=useState<Session|null>(null),[loaded,setLoaded]=useState<Loaded[]>([]),[loadingChapter,setLoadingChapter]=useState(false),[current,setCurrent]=useState(''),[saveStatus,setSaveStatus]=useState('Bereit');
- const [width,setWidth]=useState('full'),[toolsVisible,setToolsVisible]=useState(true);
+ const [toolsVisible,setToolsVisible]=useState(true);
  const sessionRef=useRef<Session|null>(null),loadedRef=useRef<Loaded[]>([]),pending=useRef<Progress|null>(null),dirty=useRef(false),saving=useRef(false),restoring=useRef(false),readerRun=useRef(0),chapterLock=useRef(false),endMarker=useRef<HTMLDivElement|null>(null);
  const loadLibrary=useCallback(async()=>{try{const d=await api<{progress:Progress[]}>('/api/progress');setLibrary(d.progress);setLibraryError('');}catch(e){setLibraryError((e as Error).message);}},[]);
  useEffect(()=>{
@@ -46,8 +48,8 @@ export default function Reader(){
    let lastY=window.scrollY,touchY=0;
    const scroll=()=>{const y=Math.max(0,window.scrollY),delta=y-lastY;if(restoring.current){lastY=y;return;}if(Math.abs(delta)<10)return;setToolsVisible(delta<0);lastY=y;};
    const wheel=(e:WheelEvent)=>{if(Math.abs(e.deltaY)>4)setToolsVisible(e.deltaY<0);};
-   const touchStart=(e:TouchEvent)=>{touchY=e.touches[0]?.clientY||0;};
-   const touchMove=(e:TouchEvent)=>{const y=e.touches[0]?.clientY||0;if(Math.abs(y-touchY)>10){setToolsVisible(y>touchY);touchY=y;}};
+   const touchStart=(e:TouchEvent)=>{if(e.touches.length===1)touchY=e.touches[0].clientY;};
+   const touchMove=(e:TouchEvent)=>{if(e.touches.length!==1||document.querySelector('.is-pinching'))return;const y=e.touches[0].clientY;if(Math.abs(y-touchY)>10){setToolsVisible(y>touchY);touchY=y;}};
    const key=(e:KeyboardEvent)=>{if(e.key==='Escape'||e.key==='ArrowUp'||e.key==='PageUp')setToolsVisible(true);if(e.key==='ArrowDown'||e.key==='PageDown')setToolsVisible(false);};
    window.addEventListener('scroll',scroll,{passive:true});window.addEventListener('wheel',wheel,{passive:true});window.addEventListener('touchstart',touchStart,{passive:true});window.addEventListener('touchmove',touchMove,{passive:true});window.addEventListener('keydown',key);
    return()=>{window.removeEventListener('scroll',scroll);window.removeEventListener('wheel',wheel);window.removeEventListener('touchstart',touchStart);window.removeEventListener('touchmove',touchMove);window.removeEventListener('keydown',key);};
@@ -68,7 +70,7 @@ export default function Reader(){
    catch{dirty.current=true;setSaveStatus('Speichern fehlgeschlagen · wird erneut versucht');}finally{saving.current=false;}
  },[]);
  const track=useCallback(()=>{
-   const s=sessionRef.current;if(!s||restoring.current)return;
+   const s=sessionRef.current;if(!s||restoring.current||document.querySelector('.is-pinching'))return;
    const nodes=Array.from(document.querySelectorAll<HTMLImageElement>('.page-image'));
    const line=0;const img=nodes.find(x=>{const r=x.getBoundingClientRect();return r.bottom>line&&r.top<window.innerHeight&&x.complete&&x.naturalHeight>0;});if(!img)return;
    const r=img.getBoundingClientRect(),chapter=img.dataset.chapter!,image=Number(img.dataset.image),offset=Math.min(1,Math.max(0,(line-r.top)/r.height));
@@ -118,9 +120,9 @@ export default function Reader(){
  return <div className={session?`app reading${toolsVisible?'':' tools-hidden'}`:'app'}>
  <header className="topbar"><button className="brand" onClick={()=>{if(session)void leaveReader();else{setBook(null);setError('');}}}><span className="brand-icon"><BookOpen size={22}/></span><span>Manhwa<span className="brand-light"> Reader</span></span></button><div className="source-badge">OLYMPUS<span>Quelle</span></div>{session&&<Button variant="outline" onClick={()=>void leaveReader()}><X size={16}/>Bibliothek</Button>}</header>
  {session?<>
-   <div className="reading-bar"><div><b dir="auto">{session.book.title}</b><span>Kapitel {current} · Bereich {session.start}–{session.end}</span></div><div className="reader-controls"><Select value={width} onValueChange={setWidth}><SelectTrigger aria-label="Lesebreite"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="full">Bildschirmfüllend</SelectItem><SelectItem value="640">Schmal</SelectItem><SelectItem value="800">Standard</SelectItem><SelectItem value="1100">Breit</SelectItem></SelectContent></Select><span className="saved-status" role="status">{saveStatus.includes('fehlgeschlagen')?<AlertCircle size={15}/>:<Bookmark size={15}/>} {saveStatus}</span></div></div>
+   <div className="reading-bar"><div><b dir="auto">{session.book.title}</b><span>Kapitel {current} · Bereich {session.start}–{session.end}</span></div><div className="reader-controls"><span className="saved-status" role="status">{saveStatus.includes('fehlgeschlagen')?<AlertCircle size={15}/>:<Bookmark size={15}/>} {saveStatus}</span></div></div>
    {error&&<div className="notice" role="alert">{error}</div>}
-   <main className="reading-canvas" style={{maxWidth:width==='full'?'none':`${width}px`}}>{loaded.map(item=><section className="chapter" key={item.chapter.id}><div className="chapter-divider"><span>Kapitel {item.chapter.number}</span><a href={item.chapter.url} target="_blank" rel="noreferrer" aria-label={`Kapitel ${item.chapter.number} auf Olympus öffnen`}><ExternalLink size={16}/></a></div>{item.error?<div className="chapter-error" role="alert"><AlertCircle size={30}/><h2>Kapitel {item.chapter.number} konnte nicht geladen werden</h2><p>{item.error}</p><Button onClick={()=>void loadNext(true)}>Erneut versuchen</Button><a href={item.chapter.url} target="_blank" rel="noreferrer">Auf Olympus öffnen</a></div>:item.images.map((src,i)=><PageImage key={src} src={src} index={i} chapter={item.chapter.id} onLoad={imageLoaded} eager={!!session.resume && item.chapter.id===session.resume.chapter && i<=session.resume.image}/>)}</section>)}
+   <main className="reading-canvas">{loaded.map(item=><section className="chapter" key={item.chapter.id}><div className="chapter-divider"><span>Kapitel {item.chapter.number}</span><a href={item.chapter.url} target="_blank" rel="noreferrer" aria-label={`Kapitel ${item.chapter.number} auf Olympus öffnen`}><ExternalLink size={16}/></a></div>{item.error?<div className="chapter-error" role="alert"><AlertCircle size={30}/><h2>Kapitel {item.chapter.number} konnte nicht geladen werden</h2><p>{item.error}</p><Button onClick={()=>void loadNext(true)}>Erneut versuchen</Button><a href={item.chapter.url} target="_blank" rel="noreferrer">Auf Olympus öffnen</a></div>:item.images.map((src,i)=><PageImage key={src} src={src} index={i} chapter={item.chapter.id} onLoad={imageLoaded} eager={!!session.resume && item.chapter.id===session.resume.chapter && i<=session.resume.image}/>)}</section>)}
    {session.resume&&restoring.current&&loaded.length>0&&<div className="notice">Lesepunkt wird geladen. Falls ein vorheriges Bild nicht lädt: <Button variant="outline" onClick={()=>{restoring.current=false;track();}}>Hier weiterlesen</Button></div>}
    <div ref={endMarker} className="reader-end">{loadingChapter?<><Loader2 className="spin"/>Kapitel wird geladen …</>:loaded.at(-1)?.error?null:loaded.at(-1)?.chapter.id===session.chapters.at(-1)?.id?<><Check/>Du hast das Ende deines Kapitelbereichs erreicht.<Button variant="outline" onClick={()=>void leaveReader()}>Zur Kapitelauswahl</Button></>:<Button variant="outline" onClick={()=>void loadNext()}>Nächstes Kapitel laden</Button>}</div></main>
  </>:<main className="workspace">
