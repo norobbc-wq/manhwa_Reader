@@ -6,3 +6,5 @@ export async function GET(request:Request) {
     return Response.json({images,url});
   }catch(e){return Response.json({error:(e as Error).message},{status:502});}
 }
+
+

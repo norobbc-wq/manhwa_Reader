@@ -47,11 +47,10 @@ export function parseChapters(html:string,slug:string):Chapter[] {
 }
 export function parseImages(html:string):string[] {
   const images:string[]=[];
-  const area=html.match(/<(?:div|section)[^>]*(?:id|class)=["'][^"']*(?:reading-content|chapter-content|reader-area)[^"']*["'][^>]*>([\s\S]*?)(?:<\/section>|<script)/i)?.[1];
-  for(const m of (area||html).matchAll(/<img\b([^>]*)>/gi)) {
+  for(const m of html.matchAll(/<img\b([^>]*)>/gi)) {
     const a=m[1], alt=attr(a,'alt');
     const src=attr(a,'data-src')||attr(a,'data-original')||attr(a,'src');
-    if(!src||(!area&&!/image of episode/i.test(alt)&&!/\/uploads\/[^/]+\/[^/]+\//i.test(src))) continue;
+    if(!src||(!/image of episode/i.test(alt)&&!/(?:^|\s)manga-chapter-img(?:\s|$)/i.test(attr(a,'class'))&&!/\/uploads\/[^/]+\/[^/]+\//i.test(src))) continue;
     try{const u=new URL(src,ORIGIN); if(u.protocol==='https:'&&!u.username&&!u.password&&(!/logo|avatar|banner|advert|loading|placeholder/i.test(u.pathname))) images.push(u.href);}catch{}
   }
   return [...new Set(images)];

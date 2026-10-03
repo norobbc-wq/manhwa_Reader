@@ -1,8 +1,3 @@
 import Reader from './reader';
-import { requireChatGPTUser } from './chatgpt-auth';
-export const dynamic = 'force-dynamic';
-async function AuthenticatedReader() {
-  await requireChatGPTUser('/');
-  return <Reader />;
-}
-export default function Home() { return <AuthenticatedReader />; }
+// Owner-only access is enforced by Sites before this page or its APIs are reached.
+export default function Home() { return <Reader />; }

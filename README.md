@@ -36,4 +36,5 @@ Private Hosting-Anmeldung erfolgt über die Plattform. Der lokale Entwicklungsse
 
 TypeScript und Produktionsbuild geprüft. Parser-Tests prüfen Reihenfolge, Dezimalkapitel, Bildextraktion, Pagination und Beschränkung auf Olympus. Die lokale Fortschritts-API wurde mit ungültigen Daten, fremder Origin, anonymer Anfrage und einem vollständigen Speichern/Laden-Zyklus geprüft.
 
-Die echte Olympus-Webseite wurde auf dem Entwicklungscomputer durch WatchGuard blockiert. Deshalb konnte die vollständige Live-Kette Titel → Kapitel → Bilder hier nicht verifiziert werden. Änderungen des Olympus-HTML, Bildschutz oder Zugangsprüfungen können den Abruf verhindern. Der Reader zeigt dann einen Fehler und den Originallink.
+Der direkte Olympus-Zugriff auf dem Entwicklungscomputer wurde durch WatchGuard blockiert. Der veröffentlichte Reader ruft deshalb Katalog und Kapitel serverseitig ab; diese Abrufe wurden am echten Olympus-Inhalt geprüft. Kapitelbilder werden weiterhin direkt aus der Originalquelle geladen. Änderungen des Olympus-HTML, Bildschutz oder Zugangsprüfungen können den Abruf verhindern. Der Reader zeigt dann einen Fehler und den Originallink.
+
