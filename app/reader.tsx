@@ -24,10 +24,34 @@ export default function Reader(){
  const [library,setLibrary]=useState<Progress[]>([]),[libraryError,setLibraryError]=useState('');
  const [book,setBook]=useState<Book|null>(null),[busy,setBusy]=useState(''),[error,setError]=useState(''),[from,setFrom]=useState(''),[to,setTo]=useState('');
  const [session,setSession]=useState<Session|null>(null),[loaded,setLoaded]=useState<Loaded[]>([]),[loadingChapter,setLoadingChapter]=useState(false),[current,setCurrent]=useState(''),[saveStatus,setSaveStatus]=useState('Bereit');
- const [width,setWidth]=useState('800');
+ const [width,setWidth]=useState('full'),[toolsVisible,setToolsVisible]=useState(true);
  const sessionRef=useRef<Session|null>(null),loadedRef=useRef<Loaded[]>([]),pending=useRef<Progress|null>(null),dirty=useRef(false),saving=useRef(false),restoring=useRef(false),readerRun=useRef(0),chapterLock=useRef(false),endMarker=useRef<HTMLDivElement|null>(null);
  const loadLibrary=useCallback(async()=>{try{const d=await api<{progress:Progress[]}>('/api/progress');setLibrary(d.progress);setLibraryError('');}catch(e){setLibraryError((e as Error).message);}},[]);
- useEffect(()=>{void loadLibrary();},[loadLibrary]);
+ useEffect(()=>{
+   async function initialize(){
+     await loadLibrary();
+     if(!location.hash.startsWith('#restore='))return;
+     try{
+       const points=JSON.parse(decodeURIComponent(location.hash.slice(9))) as Progress[];
+       if(!Array.isArray(points)||points.length>100)throw Error('Ungültige Sicherung.');
+       const existing=await api<{progress:Progress[]}>('/api/progress');
+       for(const p of points){if(existing.progress.some(x=>x.slug===p.slug))continue;await api('/api/progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});}
+       history.replaceState(null,'',location.pathname+location.search);await loadLibrary();
+     }catch{setLibraryError('Deine bisherigen Lesestände konnten noch nicht übernommen werden. Bitte diese Adresse erneut laden.');}
+   }
+   void initialize();
+ },[loadLibrary]);
+ useEffect(()=>{
+   if(!session){setToolsVisible(true);return;}
+   let lastY=window.scrollY,touchY=0;
+   const scroll=()=>{const y=Math.max(0,window.scrollY),delta=y-lastY;if(restoring.current){lastY=y;return;}if(Math.abs(delta)<10)return;setToolsVisible(delta<0);lastY=y;};
+   const wheel=(e:WheelEvent)=>{if(Math.abs(e.deltaY)>4)setToolsVisible(e.deltaY<0);};
+   const touchStart=(e:TouchEvent)=>{touchY=e.touches[0]?.clientY||0;};
+   const touchMove=(e:TouchEvent)=>{const y=e.touches[0]?.clientY||0;if(Math.abs(y-touchY)>10){setToolsVisible(y>touchY);touchY=y;}};
+   const key=(e:KeyboardEvent)=>{if(e.key==='Escape'||e.key==='ArrowUp'||e.key==='PageUp')setToolsVisible(true);if(e.key==='ArrowDown'||e.key==='PageDown')setToolsVisible(false);};
+   window.addEventListener('scroll',scroll,{passive:true});window.addEventListener('wheel',wheel,{passive:true});window.addEventListener('touchstart',touchStart,{passive:true});window.addEventListener('touchmove',touchMove,{passive:true});window.addEventListener('keydown',key);
+   return()=>{window.removeEventListener('scroll',scroll);window.removeEventListener('wheel',wheel);window.removeEventListener('touchstart',touchStart);window.removeEventListener('touchmove',touchMove);window.removeEventListener('keydown',key);};
+ },[session]);
  const indexCatalog=useCallback(async()=>{
    const run=++searchRun.current;setIndexing(true);setSearchError('');
    try{
@@ -46,7 +70,7 @@ export default function Reader(){
  const track=useCallback(()=>{
    const s=sessionRef.current;if(!s||restoring.current)return;
    const nodes=Array.from(document.querySelectorAll<HTMLImageElement>('.page-image'));
-   const line=92;const img=nodes.find(x=>{const r=x.getBoundingClientRect();return r.bottom>line&&r.top<window.innerHeight&&x.complete&&x.naturalHeight>0;});if(!img)return;
+   const line=0;const img=nodes.find(x=>{const r=x.getBoundingClientRect();return r.bottom>line&&r.top<window.innerHeight&&x.complete&&x.naturalHeight>0;});if(!img)return;
    const r=img.getBoundingClientRect(),chapter=img.dataset.chapter!,image=Number(img.dataset.image),offset=Math.min(1,Math.max(0,(line-r.top)/r.height));
    pending.current={slug:s.book.slug,title:s.book.title,chapter,image,offset,start:s.start,end:s.end,updated:Date.now()};dirty.current=true;setCurrent(chapter);
  },[]);
@@ -63,7 +87,7 @@ export default function Reader(){
    if(!Number.isFinite(start)||!Number.isFinite(end)||start>end){setError('Bitte einen gültigen Kapitelbereich angeben.');return;}
    const selected=b.chapters.filter(c=>c.number>=start&&c.number<=end);if(!selected.length){setError('In diesem Bereich sind keine Kapitel verfügbar.');return;}
    if(resume&&!selected.some(c=>c.id===resume.chapter)){setError('Dein gespeichertes Kapitel ist auf Olympus derzeit nicht verfügbar. Wähle einen neuen Bereich.');return;}
-   const s:Session={book:b,chapters:selected,start,end,resume};readerRun.current++;sessionRef.current=s;setSession(s);loadedRef.current=[];setLoaded([]);chapterLock.current=false;pending.current=null;dirty.current=false;restoring.current=!!resume;setCurrent(resume?.chapter||selected[0].id);setSaveStatus(resume?'Lesepunkt wird wiederhergestellt …':'Bereit');setError('');window.scrollTo(0,0);
+   const s:Session={book:b,chapters:selected,start,end,resume};readerRun.current++;sessionRef.current=s;setSession(s);setToolsVisible(false);loadedRef.current=[];setLoaded([]);chapterLock.current=false;pending.current=null;dirty.current=false;restoring.current=!!resume;setCurrent(resume?.chapter||selected[0].id);setSaveStatus(resume?'Lesepunkt wird wiederhergestellt …':'Bereit');setError('');window.scrollTo(0,0);
  }
  const loadNext=useCallback(async(retry=false)=>{
    const s=sessionRef.current;if(!s||chapterLock.current)return;const list=loadedRef.current,last=list.at(-1);if(last?.error&&!retry)return;
@@ -79,7 +103,7 @@ export default function Reader(){
  const imageLoaded=useCallback(()=>{
    const s=sessionRef.current;if(restoring.current&&s?.resume){const r=s.resume;const images=Array.from(document.querySelectorAll<HTMLImageElement>('.page-image')).filter(x=>x.dataset.chapter===r.chapter);const target=images.find(x=>Number(x.dataset.image)===r.image);
      if(!target)return;if(!images.filter(x=>Number(x.dataset.image)<=r.image).every(x=>x.complete&&x.naturalHeight>0))return;
-     window.scrollTo(0,window.scrollY+target.getBoundingClientRect().top+target.getBoundingClientRect().height*r.offset-92);restoring.current=false;setSaveStatus('Lesepunkt wiederhergestellt');requestAnimationFrame(track);
+     window.scrollTo(0,window.scrollY+target.getBoundingClientRect().top+target.getBoundingClientRect().height*r.offset);restoring.current=false;setSaveStatus('Lesepunkt wiederhergestellt');requestAnimationFrame(track);
    }else track();
  },[track]);
  async function leaveReader(){track();await save();if(dirty.current){setError('Dein Lesepunkt konnte noch nicht gespeichert werden. Bitte erneut versuchen.');return;}readerRun.current++;sessionRef.current=null;setSession(null);setLoaded([]);setError('');window.scrollTo(0,0);}
@@ -91,12 +115,12 @@ export default function Reader(){
    Promise.resolve(context.registerTool({name:'search_manhwa',title:'Manhwa suchen',description:'Setzt die sichtbare Titelsuche und lädt den Olympus-Katalog.',inputSchema:{type:'object',properties:{title:{type:'string',minLength:2,maxLength:300}},required:['title'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute:async(input:unknown)=>{const title=(input as {title?:unknown}).title;if(typeof title!=='string'||title.trim().length<2||title.length>300)throw Error('Bitte einen gültigen Titel angeben.');setQuery(title);await indexCatalog();return {matches:[...catalogRef.current.values()].filter(s=>norm(s.title).includes(norm(title))).map(s=>({title:s.title,slug:s.slug}))};}}, {signal:ctl.signal})).catch(()=>{});return()=>ctl.abort();
  },[indexCatalog]);
 
- return <div className={session?'app reading':'app'}>
+ return <div className={session?`app reading${toolsVisible?'':' tools-hidden'}`:'app'}>
  <header className="topbar"><button className="brand" onClick={()=>{if(session)void leaveReader();else{setBook(null);setError('');}}}><span className="brand-icon"><BookOpen size={22}/></span><span>Manhwa<span className="brand-light"> Reader</span></span></button><div className="source-badge">OLYMPUS<span>Quelle</span></div>{session&&<Button variant="outline" onClick={()=>void leaveReader()}><X size={16}/>Bibliothek</Button>}</header>
  {session?<>
-   <div className="reading-bar"><div><b dir="auto">{session.book.title}</b><span>Kapitel {current} · Bereich {session.start}–{session.end}</span></div><div className="reader-controls"><Select value={width} onValueChange={setWidth}><SelectTrigger aria-label="Lesebreite"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="640">Schmal</SelectItem><SelectItem value="800">Standard</SelectItem><SelectItem value="1100">Breit</SelectItem></SelectContent></Select><span className="saved-status" role="status">{saveStatus.includes('fehlgeschlagen')?<AlertCircle size={15}/>:<Bookmark size={15}/>} {saveStatus}</span></div></div>
+   <div className="reading-bar"><div><b dir="auto">{session.book.title}</b><span>Kapitel {current} · Bereich {session.start}–{session.end}</span></div><div className="reader-controls"><Select value={width} onValueChange={setWidth}><SelectTrigger aria-label="Lesebreite"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="full">Bildschirmfüllend</SelectItem><SelectItem value="640">Schmal</SelectItem><SelectItem value="800">Standard</SelectItem><SelectItem value="1100">Breit</SelectItem></SelectContent></Select><span className="saved-status" role="status">{saveStatus.includes('fehlgeschlagen')?<AlertCircle size={15}/>:<Bookmark size={15}/>} {saveStatus}</span></div></div>
    {error&&<div className="notice" role="alert">{error}</div>}
-   <main className="reading-canvas" style={{maxWidth:`${width}px`}}>{loaded.map(item=><section className="chapter" key={item.chapter.id}><div className="chapter-divider"><span>Kapitel {item.chapter.number}</span><a href={item.chapter.url} target="_blank" rel="noreferrer" aria-label={`Kapitel ${item.chapter.number} auf Olympus öffnen`}><ExternalLink size={16}/></a></div>{item.error?<div className="chapter-error" role="alert"><AlertCircle size={30}/><h2>Kapitel {item.chapter.number} konnte nicht geladen werden</h2><p>{item.error}</p><Button onClick={()=>void loadNext(true)}>Erneut versuchen</Button><a href={item.chapter.url} target="_blank" rel="noreferrer">Auf Olympus öffnen</a></div>:item.images.map((src,i)=><PageImage key={src} src={src} index={i} chapter={item.chapter.id} onLoad={imageLoaded} eager={!!session.resume && item.chapter.id===session.resume.chapter && i<=session.resume.image}/>)}</section>)}
+   <main className="reading-canvas" style={{maxWidth:width==='full'?'none':`${width}px`}}>{loaded.map(item=><section className="chapter" key={item.chapter.id}><div className="chapter-divider"><span>Kapitel {item.chapter.number}</span><a href={item.chapter.url} target="_blank" rel="noreferrer" aria-label={`Kapitel ${item.chapter.number} auf Olympus öffnen`}><ExternalLink size={16}/></a></div>{item.error?<div className="chapter-error" role="alert"><AlertCircle size={30}/><h2>Kapitel {item.chapter.number} konnte nicht geladen werden</h2><p>{item.error}</p><Button onClick={()=>void loadNext(true)}>Erneut versuchen</Button><a href={item.chapter.url} target="_blank" rel="noreferrer">Auf Olympus öffnen</a></div>:item.images.map((src,i)=><PageImage key={src} src={src} index={i} chapter={item.chapter.id} onLoad={imageLoaded} eager={!!session.resume && item.chapter.id===session.resume.chapter && i<=session.resume.image}/>)}</section>)}
    {session.resume&&restoring.current&&loaded.length>0&&<div className="notice">Lesepunkt wird geladen. Falls ein vorheriges Bild nicht lädt: <Button variant="outline" onClick={()=>{restoring.current=false;track();}}>Hier weiterlesen</Button></div>}
    <div ref={endMarker} className="reader-end">{loadingChapter?<><Loader2 className="spin"/>Kapitel wird geladen …</>:loaded.at(-1)?.error?null:loaded.at(-1)?.chapter.id===session.chapters.at(-1)?.id?<><Check/>Du hast das Ende deines Kapitelbereichs erreicht.<Button variant="outline" onClick={()=>void leaveReader()}>Zur Kapitelauswahl</Button></>:<Button variant="outline" onClick={()=>void loadNext()}>Nächstes Kapitel laden</Button>}</div></main>
  </>:<main className="workspace">

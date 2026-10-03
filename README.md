@@ -8,13 +8,13 @@ Ein eigenständiger Web-Reader für öffentlich abrufbare Manhwa auf https://oly
 - Vollständigen Katalog einschließlich Folgeseiten durchsuchen.
 - Alle Kapitel oder einen frei gewählten Bereich in aufsteigender Reihenfolge lesen.
 - Kapitel beim Scrollen automatisch nachladen.
-- Kapitel, Bild und relative Bildposition dauerhaft pro angemeldetem Nutzer speichern (Cloudflare D1).
+- Kapitel, Bild und relative Bildposition dauerhaft pro Browser speichern (Cloudflare D1 und eine zufällige Browserkennung).
 - Zuletzt gelesene Serien mit dem gespeicherten Lesepunkt fortsetzen.
 - Mobilansicht, einstellbare Lesebreite, klare Fehlerzustände und Links zum Original.
 
 ## Nutzung
 
-Die veröffentlichte private Webadresse kann direkt im Browser geöffnet werden. Die Anmeldung schützt den persönlichen Lesefortschritt; ein Chat muss nicht geöffnet sein. Bilder stammen aus den Originalquellen. Nicht öffentlich zugängliche Kapitel und Zugangssperren werden nicht umgangen.
+Die Webadresse ist ohne Konto und ohne ChatGPT-Anmeldung im Browser erreichbar. Eine zufällige, nicht erratbare HttpOnly-Browserkennung trennt die persönlichen Lesestände; die eigentlichen Daten bleiben dauerhaft in D1. Cookies müssen für das Wiedererkennen des Browsers erlaubt sein. Bilder stammen aus den Originalquellen. Nicht öffentlich zugängliche Kapitel und Zugangssperren werden nicht umgangen.
 
 Die erste Titelsuche lädt den paginierten Olympus-Katalog. Ergebnisse erscheinen schon während des Ladens. Ein direkter Serienlink ist schneller.
 
@@ -30,7 +30,7 @@ Lokale D1-Migration nach dem ersten Build:
 node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_tranquil_kinsey_walden.sql
 ```
 
-Private Hosting-Anmeldung erfolgt über die Plattform. Der lokale Entwicklungsserver verwendet ausschließlich für localhost eine Testanmeldung.
+Die Leseansicht nutzt standardmäßig die gesamte Bildschirmbreite. Kopf und Titel verschwinden beim Lesen nach unten und erscheinen beim Scrollen nach oben. Die Werkzeugleisten liegen über dem Bild und erzeugen keinen freien Rand. Escape blendet sie ebenfalls ein.
 
 ## Verifikation und Grenzen
 
